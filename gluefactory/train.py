@@ -223,7 +223,7 @@ def training(rank, conf, output_dir, args):
             print(conf.model)
         else:
             init_cp = None
-
+    accumulation_steps = 128
     OmegaConf.set_struct(conf, True)  # prevent access to unknown entries
     set_seed(conf.train.seed)
     if rank == 0:
@@ -425,6 +425,7 @@ def training(rank, conf, output_dir, args):
                 pred = model(data)
                 losses, _ = loss_fn(pred, data)
                 loss = torch.mean(losses["total"])
+                loss = loss / accumulation_steps
             if torch.isnan(loss).any():
                 print(f"Detected NAN, skipping iteration {it}")
                 del pred, data, loss, losses
@@ -449,23 +450,24 @@ def training(rank, conf, output_dir, args):
                             detected_anomaly = True
                     if detected_anomaly:
                         raise RuntimeError("Detected anomaly in training.")
-                if conf.train.get("clip_grad", None):
-                    scaler.unscale_(optimizer)
-                    try:
-                        torch.nn.utils.clip_grad_norm_(
-                            all_params,
-                            max_norm=conf.train.clip_grad,
-                            error_if_nonfinite=True,
-                        )
+                if (it + 1) % accumulation_steps == 0:
+                    if conf.train.get("clip_grad", None):
+                        scaler.unscale_(optimizer)
+                        try:
+                            torch.nn.utils.clip_grad_norm_(
+                                all_params,
+                                max_norm=conf.train.clip_grad,
+                                error_if_nonfinite=True,
+                            )
+                            scaler.step(optimizer)
+                        except RuntimeError:
+                            logger.warning("NaN detected in gradients. Skipping iteration.")
+                        scaler.update()
+                    else:
                         scaler.step(optimizer)
-                    except RuntimeError:
-                        logger.warning("NaN detected in gradients. Skipping iteration.")
-                    scaler.update()
-                else:
-                    scaler.step(optimizer)
-                    scaler.update()
-                if not conf.train.lr_schedule.on_epoch:
-                    lr_scheduler.step()
+                        scaler.update()
+                    if not conf.train.lr_schedule.on_epoch:
+                        lr_scheduler.step()
             else:
                 if rank == 0:
                     logger.warning(f"Skip iteration {it} due to detach.")
@@ -473,7 +475,7 @@ def training(rank, conf, output_dir, args):
             if args.profile:
                 prof.step()
 
-            if it % conf.train.log_every_iter == 0:
+            if ((it + 1) % accumulation_steps) % conf.train.log_every_iter == 0:
                 for k in sorted(losses.keys()):
                     if args.distributed:
                         losses[k] = losses[k].sum(-1)
