@@ -17,7 +17,7 @@ model:
         max_num_keypoints: 512
         force_num_keypoints: True
         detection_threshold: 0.0
-        trainable: True
+        trainable: False
     ground_truth:
         name: matchers.homography_matcher
         th_positive: 3
@@ -31,8 +31,8 @@ model:
 train:
     seed: 0
     epochs: 20
-    log_every_iter: 100
-    eval_every_iter: 500
+    log_every_iter: 128
+    eval_every_iter: 5120
     lr: 1e-4
     lr_schedule:
         start: 20

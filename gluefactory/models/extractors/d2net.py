@@ -15,7 +15,7 @@ class D2NetExtractor(BaseModel):
     default_conf = {
         "max_kp" : 4000,
         "detection_threshold" : 0.0,
-        "model_pth": "/home/niranjan/glue-factory/d2net/d2-net/models/d2_tf_no_phototourism.pth"
+        "model_pth": "/home/niranjan/glue-factory/d2net/d2-net/models/d2_tf.pth"
     }
     def _init(self, conf):
         self.max_kp = conf["max_kp"]
@@ -62,7 +62,7 @@ class D2NetExtractor(BaseModel):
         
         mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1).to(image)
         std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1).to(image)
-        input_image = (image - mean) / std
+        input_image = (image ) 
         keypoints, scores, descriptors = process_multiscale(input_image, self.model,  scales=[1])
         col0 = keypoints[:, 0].unsqueeze(1)
         col1 = keypoints[:, 1].unsqueeze(1)
